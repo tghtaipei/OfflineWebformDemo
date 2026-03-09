@@ -243,7 +243,7 @@
   <div class="storage-bar">
     <span class="storage-item"><span class="storage-dot dot-ls"></span>localStorage：同步暫存</span>
     <span class="storage-item"><span class="storage-dot dot-lf"></span><span id="lfStatus">localForage 載入中…</span></span>
-    <span class="storage-item"><span class="storage-dot dot-sw" id="swDot"></span><span id="swStatus">Service Worker 偵測中…</span></span>
+    <span class="storage-item"><span class="storage-dot dot-sw" id="swDot" style="background:#9aa0a6"></span><span id="swStatus" style="color:#9aa0a6">離線刷新：需自行託管（非 Apps Script）</span></span>
   </div>
 
   <form id="mainForm" autocomplete="off">
@@ -430,12 +430,6 @@ function setLFStatus(msg, color) {
   if (el) { el.textContent = msg; el.style.color = color; }
 }
 
-function setSwStatus(msg, color) {
-  var el  = document.getElementById('swStatus');
-  var dot = document.getElementById('swDot');
-  if (el)  { el.textContent = msg; el.style.color = color; }
-  if (dot) { dot.style.background = color; }
-}
 
 /* ============================================================
    2. Network Status
@@ -814,62 +808,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSavedData();
   });
 
-  // ② 註冊 Service Worker（讓 F5 離線刷新也能正常顯示）
-  registerSW();
 });
-
-/* ============================================================
-   Service Worker 註冊
-   sw.js 由 Apps Script doGet(e.pathInfo==='sw.js') 提供
-   技術：用絕對路徑 + 明確 scope = location.pathname（/macros/s/ID/exec）
-   SW 腳本路徑（exec/sw.js）以 scope（exec）為前綴，不需 SW-Allowed header
-   ============================================================ */
-function registerSW() {
-  if (!('serviceWorker' in navigator)) {
-    setSwStatus('此環境不支援 Service Worker', '#ea4335');
-    return;
-  }
-
-  // 絕對路徑：/macros/s/ID/exec/sw.js
-  // scope：   /macros/s/ID/exec  （覆蓋主頁面，不需尾部斜線）
-  var swUrl   = location.pathname + '/sw.js';
-  var swScope = location.pathname;
-
-  navigator.serviceWorker.register(swUrl, { scope: swScope }).then(function(reg) {
-    function applyState(worker) {
-      if (!worker) return;
-      worker.addEventListener('statechange', function() {
-        if (worker.state === 'activated') {
-          setSwStatus('Service Worker 已啟用（離線刷新可用）', '#34a853');
-        } else if (worker.state === 'installing') {
-          setSwStatus('Service Worker 安裝中…', '#fbbc04');
-        }
-      });
-    }
-
-    // 已有啟用中的 SW
-    if (reg.active) {
-      setSwStatus('Service Worker 已啟用（離線刷新可用）', '#34a853');
-    } else if (reg.installing) {
-      setSwStatus('Service Worker 安裝中…', '#fbbc04');
-      applyState(reg.installing);
-    } else if (reg.waiting) {
-      setSwStatus('Service Worker 等待啟用…', '#fbbc04');
-      applyState(reg.waiting);
-    }
-
-    // 偵測後續更新
-    reg.addEventListener('updatefound', function() {
-      setSwStatus('Service Worker 更新中…', '#fbbc04');
-      applyState(reg.installing);
-    });
-
-  }).catch(function(err) {
-    // Google Apps Script 環境可能限制 SW 權限，優雅降級
-    setSwStatus('Service Worker 未啟用（離線刷新不可用）', '#ea4335');
-    console.warn('SW registration failed:', err);
-  });
-}
 
 window.addEventListener('resize', function() {
   // 備份目前簽名，initCanvas() 會清空 canvas，之後再還原
