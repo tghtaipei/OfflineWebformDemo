@@ -810,6 +810,18 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSavedData();
   });
 
+  // F5 / 關頁前強制同步儲存，防止 600ms 防抖未觸發就離頁
+  window.addEventListener('beforeunload', function() {
+    clearTimeout(saveTimer);
+    var fields = collectFormFields();
+    try { localStorage.setItem(LS_KEY, JSON.stringify(fields)); } catch(e) {}
+    // localForage (IndexedDB) 為非同步，beforeunload 不保證能完成寫入；
+    // localStorage 是同步的，可確保欄位資料即時保存。
+    if (window.localforage && window.localforage !== localForageFallback) {
+      window.localforage.setItem(LF_KEY, fields).catch(function() {});
+    }
+  });
+
   // Service Worker（GitHub Pages 支援，離線 F5 刷新）
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(function(reg) {
