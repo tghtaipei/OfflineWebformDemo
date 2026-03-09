@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>離線暫存網頁Demo</title>
+  <!-- ① 確保 URL 帶尾部斜線，Service Worker scope 才能覆蓋此頁（exec → exec/） -->
+  <script>(function(){if(location.pathname.slice(-1)!=='/')location.replace(location.pathname+'/'+location.search+location.hash);})();</script>
   <style>
     /* ── Reset & Base ─────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -164,6 +166,7 @@
     .storage-dot  { width: 7px; height: 7px; border-radius: 50%; }
     .dot-ls  { background: #fbbc04; }
     .dot-lf  { background: #34a853; }
+    .dot-sw  { background: #1a73e8; }
 
     /* ── Modal Overlay ───────────────────────────────────── */
     .modal-overlay {
@@ -240,9 +243,9 @@
 
   <!-- ── Storage Info ────────────────────────────────────── -->
   <div class="storage-bar">
-    <span class="storage-item"><span class="storage-dot dot-ls"></span>localStorage：同步暫存，即時寫入</span>
-    <span class="storage-item"><span class="storage-dot dot-lf"></span>localForage：非同步暫存，優先使用 IndexedDB</span>
-    <span id="lfStatus" style="margin-left:auto;color:#9aa0a6;">&#8635; 載入 localForage 中…</span>
+    <span class="storage-item"><span class="storage-dot dot-ls"></span>localStorage：同步暫存</span>
+    <span class="storage-item"><span class="storage-dot dot-lf"></span><span id="lfStatus">localForage 載入中…</span></span>
+    <span class="storage-item"><span class="storage-dot dot-sw" id="swDot"></span><span id="swStatus">Service Worker 偵測中…</span></span>
   </div>
 
   <form id="mainForm" autocomplete="off">
@@ -427,6 +430,13 @@ function loadLocalForageLib() {
 function setLFStatus(msg, color) {
   var el = document.getElementById('lfStatus');
   if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+function setSwStatus(msg, color) {
+  var el  = document.getElementById('swStatus');
+  var dot = document.getElementById('swDot');
+  if (el)  { el.textContent = msg; el.style.color = color; }
+  if (dot) { dot.style.background = color; }
 }
 
 /* ============================================================
@@ -805,7 +815,57 @@ document.addEventListener('DOMContentLoaded', function() {
   loadLocalForageLib().then(function() {
     loadSavedData();
   });
+
+  // ② 註冊 Service Worker（讓 F5 離線刷新也能正常顯示）
+  registerSW();
 });
+
+/* ============================================================
+   Service Worker 註冊
+   sw.js 由 Apps Script doGet(e.pathInfo==='sw.js') 提供
+   URL 需帶尾部斜線（exec/）SW scope 才能覆蓋主頁面
+   ============================================================ */
+function registerSW() {
+  if (!('serviceWorker' in navigator)) {
+    setSwStatus('此環境不支援 Service Worker', '#ea4335');
+    return;
+  }
+
+  navigator.serviceWorker.register('sw.js').then(function(reg) {
+    function applyState(worker) {
+      if (!worker) return;
+      worker.addEventListener('statechange', function() {
+        if (worker.state === 'activated') {
+          setSwStatus('Service Worker 已啟用（離線刷新可用）', '#34a853');
+        } else if (worker.state === 'installing') {
+          setSwStatus('Service Worker 安裝中…', '#fbbc04');
+        }
+      });
+    }
+
+    // 已有啟用中的 SW
+    if (reg.active) {
+      setSwStatus('Service Worker 已啟用（離線刷新可用）', '#34a853');
+    } else if (reg.installing) {
+      setSwStatus('Service Worker 安裝中…', '#fbbc04');
+      applyState(reg.installing);
+    } else if (reg.waiting) {
+      setSwStatus('Service Worker 等待啟用…', '#fbbc04');
+      applyState(reg.waiting);
+    }
+
+    // 偵測後續更新
+    reg.addEventListener('updatefound', function() {
+      setSwStatus('Service Worker 更新中…', '#fbbc04');
+      applyState(reg.installing);
+    });
+
+  }).catch(function(err) {
+    // Google Apps Script 環境可能限制 SW 權限，優雅降級
+    setSwStatus('Service Worker 未啟用（離線刷新不可用）', '#ea4335');
+    console.warn('SW registration failed:', err);
+  });
+}
 
 window.addEventListener('resize', function() {
   // 備份目前簽名，initCanvas() 會清空 canvas，之後再還原
