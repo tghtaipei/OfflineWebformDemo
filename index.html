@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>離線暫存網頁Demo</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a73e8">
   <style>
     /* ── Reset & Base ─────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -243,7 +245,7 @@
   <div class="storage-bar">
     <span class="storage-item"><span class="storage-dot dot-ls"></span>localStorage：同步暫存</span>
     <span class="storage-item"><span class="storage-dot dot-lf"></span><span id="lfStatus">localForage 載入中…</span></span>
-    <span class="storage-item"><span class="storage-dot dot-sw" id="swDot" style="background:#9aa0a6"></span><span id="swStatus" style="color:#9aa0a6">離線刷新：需自行託管（非 Apps Script）</span></span>
+    <span class="storage-item"><span class="storage-dot dot-sw" id="swDot"></span><span id="swStatus">Service Worker 偵測中…</span></span>
   </div>
 
   <form id="mainForm" autocomplete="off">
@@ -808,7 +810,42 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSavedData();
   });
 
+  // Service Worker（GitHub Pages 支援，離線 F5 刷新）
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(function(reg) {
+      function onActivated() {
+        setSwStatus('Service Worker 已啟用（離線刷新可用）', '#34a853');
+      }
+      if (reg.active) {
+        onActivated();
+      } else {
+        setSwStatus('Service Worker 安裝中…', '#fbbc04');
+        (reg.installing || reg.waiting).addEventListener('statechange', function(e) {
+          if (e.target.state === 'activated') onActivated();
+        });
+      }
+      reg.addEventListener('updatefound', function() {
+        setSwStatus('Service Worker 更新中…', '#fbbc04');
+        reg.installing.addEventListener('statechange', function(e) {
+          if (e.target.state === 'activated') onActivated();
+        });
+      });
+    }).catch(function(err) {
+      setSwStatus('Service Worker 未啟用', '#ea4335');
+      console.warn('SW:', err);
+    });
+  } else {
+    setSwStatus('此瀏覽器不支援 Service Worker', '#9aa0a6');
+  }
+
 });
+
+function setSwStatus(msg, color) {
+  var el = document.getElementById('swStatus');
+  var dot = document.getElementById('swDot');
+  if (el)  { el.textContent = msg; el.style.color = color; }
+  if (dot) { dot.style.background = color; }
+}
 
 window.addEventListener('resize', function() {
   // 備份目前簽名，initCanvas() 會清空 canvas，之後再還原
