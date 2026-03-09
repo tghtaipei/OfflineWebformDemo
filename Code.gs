@@ -3,8 +3,7 @@
  * 使用 HtmlService 提供具備離線暫存功能的電子表單
  *
  * URL 路由：
- *   /exec        → 主頁面 HTML（會被 index.html 自動導向到 /exec/）
- *   /exec/       → 主頁面 HTML
+ *   /exec        → 主頁面 HTML
  *   /exec/sw.js  → Service Worker 腳本（讓 F5 離線也能正常顯示）
  */
 function doGet(e) {
@@ -24,9 +23,13 @@ function doGet(e) {
 
 /**
  * Service Worker 原始碼
- * 策略：
- *   主頁面  → Network-First（有網路就更新快取；離線則走快取）
- *   CDN 資源 → Cache-First（localForage 等第三方庫）
+ *
+ * 頁面位於 /exec（無尾部斜線），SW 腳本位於 /exec/sw.js
+ * scope 設為 /exec，SW 腳本路徑以 scope 為前綴，符合瀏覽器規範
+ *
+ * 快取策略：
+ *   主頁面  → Network-First（有網路先更新；離線走快取）
+ *   CDN 資源 → Cache-First（localForage 函式庫）
  */
 function getSwCode() {
   return [
@@ -36,14 +39,18 @@ function getSwCode() {
     "  'https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js'",
     "];",
     "",
+    "/* 正規化 URL：移除尾部斜線，作為統一的快取 key */",
+    "function pageKey(url) { return url.replace(/\\/$/, ''); }",
+    "",
     "self.addEventListener('install', function(ev) {",
     "  self.skipWaiting();",
-    "  var scope = self.registration.scope;",
+    "  /* scope 可能是 exec 或 exec/，統一用 exec（無斜線）作快取 key */",
+    "  var key = pageKey(self.registration.scope);",
     "  ev.waitUntil(",
     "    caches.open(CACHE).then(function(cache) {",
     "      var tasks = [",
-    "        fetch(scope, {credentials:'same-origin'})",
-    "          .then(function(r){ if(r&&r.ok) return cache.put(scope,r); })",
+    "        fetch(key, {credentials:'same-origin'})",
+    "          .then(function(r){ if(r&&r.ok) return cache.put(key, r); })",
     "          .catch(function(){})",
     "      ];",
     "      CDN.forEach(function(url){",
@@ -71,7 +78,7 @@ function getSwCode() {
     "",
     "self.addEventListener('fetch', function(ev) {",
     "  var url = ev.request.url;",
-    "  var scope = self.registration.scope;",
+    "  var key = pageKey(self.registration.scope);",
     "",
     "  /* CDN 資源：Cache-First */",
     "  if(url.indexOf('cdn.jsdelivr.net') !== -1) {",
@@ -88,17 +95,19 @@ function getSwCode() {
     "    return;",
     "  }",
     "",
-    "  /* 主頁面：Network-First，離線走快取 */",
-    "  if(url===scope || url===scope.slice(0,-1)) {",
+    "  /* 主頁面：Network-First，離線走快取",
+    "     比對 exec 與 exec/（帶或不帶斜線都接受）,不攔截 sw.js 本身 */",
+    "  var urlKey = pageKey(url);",
+    "  if(urlKey === key && url.indexOf('/sw.js') === -1) {",
     "    ev.respondWith(",
-    "      fetch(ev.request,{credentials:'same-origin'})",
+    "      fetch(ev.request, {credentials:'same-origin'})",
     "        .then(function(r){",
     "          if(r&&r.ok)",
-    "            caches.open(CACHE).then(function(c){ c.put(scope,r.clone()); });",
+    "            caches.open(CACHE).then(function(c){ c.put(key, r.clone()); });",
     "          return r;",
     "        })",
     "        .catch(function(){",
-    "          return caches.match(scope).then(function(cached){",
+    "          return caches.match(key).then(function(cached){",
     "            if(cached) return cached;",
     "            return new Response(",
     "              '<!DOCTYPE html><html><head><meta charset=UTF-8><title>離線中</title></head>' +",

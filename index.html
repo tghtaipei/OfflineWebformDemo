@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>離線暫存網頁Demo</title>
-  <!-- ① 確保 URL 帶尾部斜線，Service Worker scope 才能覆蓋此頁（exec → exec/） -->
-  <script>(function(){if(location.pathname.slice(-1)!=='/')location.replace(location.pathname+'/'+location.search+location.hash);})();</script>
   <style>
     /* ── Reset & Base ─────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -823,7 +821,8 @@ document.addEventListener('DOMContentLoaded', function() {
 /* ============================================================
    Service Worker 註冊
    sw.js 由 Apps Script doGet(e.pathInfo==='sw.js') 提供
-   URL 需帶尾部斜線（exec/）SW scope 才能覆蓋主頁面
+   技術：用絕對路徑 + 明確 scope = location.pathname（/macros/s/ID/exec）
+   SW 腳本路徑（exec/sw.js）以 scope（exec）為前綴，不需 SW-Allowed header
    ============================================================ */
 function registerSW() {
   if (!('serviceWorker' in navigator)) {
@@ -831,7 +830,12 @@ function registerSW() {
     return;
   }
 
-  navigator.serviceWorker.register('sw.js').then(function(reg) {
+  // 絕對路徑：/macros/s/ID/exec/sw.js
+  // scope：   /macros/s/ID/exec  （覆蓋主頁面，不需尾部斜線）
+  var swUrl   = location.pathname + '/sw.js';
+  var swScope = location.pathname;
+
+  navigator.serviceWorker.register(swUrl, { scope: swScope }).then(function(reg) {
     function applyState(worker) {
       if (!worker) return;
       worker.addEventListener('statechange', function() {
