@@ -219,10 +219,71 @@
     /* ── Divider ─────────────────────────────────────────── */
     hr { border: none; border-top: 1px solid #e8eaed; margin: 4px 0 20px; }
 
+    /* ── PDF Button ──────────────────────────────────────── */
+    .btn-pdf {
+      display: inline-block; padding: 14px 36px;
+      background: #fff; color: #1a73e8;
+      border: 2px solid #1a73e8; border-radius: 8px;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer; letter-spacing: .3px;
+      margin-left: 12px;
+      transition: background .2s, transform .15s;
+    }
+    .btn-pdf:hover { background: #e8f0fe; transform: translateY(-2px); }
+    .btn-pdf:active { transform: translateY(0); }
+
     /* ── Responsive ──────────────────────────────────────── */
     @media (max-width: 480px) {
       .card { padding: 20px 16px; }
       h1 { font-size: 21px; }
+      .btn-pdf { margin-left: 0; margin-top: 10px; }
+    }
+
+    /* ── Print / PDF ─────────────────────────────────────── */
+    @media print {
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { background: #fff; }
+      .container { max-width: 100%; padding: 0; }
+
+      /* 隱藏不需要列印的元素 */
+      .storage-bar,
+      .status-badge,
+      .sig-actions,
+      .save-indicator,
+      .btn-submit,
+      .btn-pdf,
+      .modal-overlay { display: none !important; }
+
+      /* 移除卡片陰影與圓角，節省墨水 */
+      .card {
+        box-shadow: none;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        page-break-inside: avoid;
+        margin-bottom: 12px;
+      }
+      .header-card { border-top: 4px solid #1a73e8; }
+
+      /* option 選項：選中的加底色，未選中的淡化 */
+      .option-item { border-color: #e8eaed; }
+      .option-item:has(input:checked) {
+        background: #e8f0fe;
+        border-color: #1a73e8;
+      }
+
+      /* 簽名區域：canvas 隱藏（由 JS 插入 img 替代） */
+      #sigCanvas { display: none; }
+      #sigPrintImg {
+        display: block !important;
+        width: 100%;
+        height: 200px;
+        object-fit: contain;
+        border-radius: 8px;
+      }
+      .sig-wrapper { border: 2px dashed #c5cae9; }
+
+      /* textarea 展開全文 */
+      textarea { min-height: auto; overflow: visible; }
     }
   </style>
 </head>
@@ -348,6 +409,9 @@
     <div class="card submit-area">
       <button type="button" class="btn-submit" onclick="handleSubmit()">
         &#128228; 提交表單
+      </button>
+      <button type="button" class="btn-pdf" onclick="exportPDF()">
+        &#128196; 匯出 PDF
       </button>
       <p style="font-size:12px;color:#9aa0a6;margin-top:10px;">
         離線時資料已暫存本機，連線後再提交即可取得評分結果
@@ -794,7 +858,31 @@ function overlayClick(e) {
 }
 
 /* ============================================================
-   10. Init
+   10. PDF Export
+   ============================================================ */
+function exportPDF() {
+  // 1. 將 canvas 簽名轉成 <img>（canvas 在列印環境下不穩定）
+  var printImg = document.getElementById('sigPrintImg');
+  if (!printImg) {
+    printImg = document.createElement('img');
+    printImg.id = 'sigPrintImg';
+    printImg.style.display = 'none'; // 螢幕上隱藏，列印時由 @media print 顯示
+    sigCanvas.parentElement.appendChild(printImg);
+  }
+
+  if (sigHasMark) {
+    try { printImg.src = sigCanvas.toDataURL('image/png'); }
+    catch(e) { printImg.src = ''; }
+  } else {
+    printImg.src = '';
+  }
+
+  // 2. 列印（瀏覽器會提示「另存為 PDF」）
+  window.print();
+}
+
+/* ============================================================
+   11. Init
    ============================================================ */
 document.addEventListener('DOMContentLoaded', function() {
   updateNetStatus();
