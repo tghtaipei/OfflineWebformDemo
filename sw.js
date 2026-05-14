@@ -5,7 +5,7 @@
      CDN 資源（localForage）→ Cache-First
    ===================================================== */
 
-var CACHE = 'offline-form-v1';
+var CACHE = 'offline-form-v2';
 
 var PRECACHE = [
   './',
@@ -56,8 +56,10 @@ self.addEventListener('fetch', function(ev) {
       caches.match(ev.request).then(function(cached) {
         if (cached) return cached;
         return fetch(ev.request, { mode: 'cors' }).then(function(r) {
-          if (r && (r.ok || r.type === 'opaque'))
-            caches.open(CACHE).then(function(c) { c.put(ev.request, r.clone()); });
+          if (r && (r.ok || r.type === 'opaque')) {
+            var clone = r.clone();
+            caches.open(CACHE).then(function(c) { c.put(ev.request, clone); });
+          }
           return r;
         });
       })
@@ -68,8 +70,10 @@ self.addEventListener('fetch', function(ev) {
   /* 其餘請求（主頁面、靜態資源）：Network-First with Cache Fallback */
   ev.respondWith(
     fetch(ev.request).then(function(r) {
-      if (r && r.ok)
-        caches.open(CACHE).then(function(c) { c.put(ev.request, r.clone()); });
+      if (r && r.ok) {
+        var clone = r.clone();
+        caches.open(CACHE).then(function(c) { c.put(ev.request, clone); });
+      }
       return r;
     }).catch(function() {
       return caches.match(ev.request).then(function(cached) {
