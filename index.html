@@ -599,7 +599,8 @@ function clearSignature() {
   sigCtx.clearRect(0, 0, parseFloat(sigCanvas.style.width), parseFloat(sigCanvas.style.height));
   sigHasMark = false;
   showSigPlaceholder();
-  // 同步刪除 localForage 中的簽名
+  // 同步刪除 localStorage 備份與 localForage 中的簽名
+  try { localStorage.removeItem(SIG_KEY); } catch(e) {}
   if (window.localforage) window.localforage.removeItem(SIG_KEY).catch(function() {});
   scheduleSave();
 }
@@ -731,10 +732,18 @@ function loadSavedData() {
           if (raw) restoreFormFields(JSON.parse(raw));
         } catch(e) {}
       }
-      // ② 再單獨載入簽名（SIG_KEY 存在 localForage，不受 localStorage 5MB 限制）
+      // ② 再單獨載入簽名（優先 localForage；beforeunload 有同步備份至 localStorage）
       return window.localforage.getItem(SIG_KEY);
     }).then(function(sig) {
-      restoreSignature(sig);
+      if (sig) {
+        restoreSignature(sig);
+      } else {
+        // localForage 無簽名（例如 submit 後清除）→ 從 localStorage 同步備份還原
+        try {
+          var lsSig = localStorage.getItem(SIG_KEY);
+          if (lsSig) restoreSignature(lsSig);
+        } catch(e) {}
+      }
     }).catch(function() {
       // localForage 整體失敗 → 純 localStorage fallback（無簽名）
       try {
@@ -903,6 +912,16 @@ document.addEventListener('DOMContentLoaded', function() {
     clearTimeout(saveTimer);
     var fields = collectFormFields();
     try { localStorage.setItem(LS_KEY, JSON.stringify(fields)); } catch(e) {}
+    // 簽名同步寫入 localStorage（toDataURL 是同步的，localStorage 寫入也是同步的）
+    // 這確保即使 submit 後清除了 localForage，F5 仍能從 localStorage 還原簽名
+    if (sigHasMark) {
+      try {
+        var sigData = sigCanvas.toDataURL('image/png');
+        localStorage.setItem(SIG_KEY, sigData);
+      } catch(e) { /* quota exceeded, skip */ }
+    } else {
+      try { localStorage.removeItem(SIG_KEY); } catch(e) {}
+    }
     // localForage (IndexedDB) 為非同步，beforeunload 不保證能完成寫入；
     // localStorage 是同步的，可確保欄位資料即時保存。
     if (window.localforage && window.localforage !== localForageFallback) {
